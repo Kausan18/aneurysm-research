@@ -38,6 +38,9 @@ COLUMN_MAP = {
     },
     "hemo": {
         "WSS": "Mean WSS[Pa]",
+        "MIN_WSS": "Min WSS[Pa]",
+        "MEAN_WSS": "Mean WSS[Pa]",
+        "MAX_WSS": "Max WSS[Pa]",
         "OSI": "Oscillatory Shear\nIndex（OSI）"
     },
     "clinical": {

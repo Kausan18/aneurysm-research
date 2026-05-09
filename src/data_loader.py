@@ -25,6 +25,8 @@ def load_and_merge_data():
     morph_cols = ["number", clean_col(COLUMN_MAP["morph"]["AR"]),
                   clean_col(COLUMN_MAP["morph"]["SR"])]
     hemo_cols = ["number", clean_col(COLUMN_MAP["hemo"]["WSS"]),
+                 clean_col(COLUMN_MAP["hemo"]["MIN_WSS"]),
+                 clean_col(COLUMN_MAP["hemo"]["MAX_WSS"]),
                  clean_col(COLUMN_MAP["hemo"]["OSI"])]
     clinical_cols = ["number", clean_col(COLUMN_MAP["clinical"]["HAS_ANEURYSM"]),
                      clean_col(COLUMN_MAP["clinical"]["RUPTURE"])]
