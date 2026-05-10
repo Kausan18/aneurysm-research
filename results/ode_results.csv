@@ -1,4 +1,4 @@
 Model,AUC,Accuracy,F1,Balanced_Accuracy_default,Balanced_Accuracy_tuned,Threshold_mean
-Logistic Regression,0.470 ± 0.174,0.468,0.562,0.471,0.656,0.548
-Random Forest,0.522 ± 0.071,0.652,0.780,0.472,0.643,0.934
-Gradient Boosting,0.421 ± 0.077,0.609,0.749,0.430,0.598,inf
+Logistic Regression,0.628 ± 0.129,0.586,0.563,0.592,0.691,0.499
+Random Forest,0.476 ± 0.075,0.466,0.333,0.448,0.608,inf
+Gradient Boosting,0.513 ± 0.081,0.527,0.427,0.517,0.610,0.449
