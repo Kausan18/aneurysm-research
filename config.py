@@ -103,3 +103,26 @@ CFD_DROP_COLS = [
 
 # ── ID / Duplicate Columns to Drop ───────────────────────────────────────────
 ID_DROP_COLS = ["case_id", "patient_id", "vesselName"]
+
+# ── Phase 2: Optuna Search Space ──────────────────────────────────────────────
+# Each key maps to (low, high) inclusive bounds for TPE continuous search.
+# Ranges centred on NOMINAL_PARAMS with physiologically meaningful limits.
+# Plan of Action — Table in Section 3.2.
+PHASE2_PARAM_BOUNDS = {
+    "a1": (0.1, 1.0),   # Shape → wall stress          (nominal 0.8)
+    "a2": (0.1, 0.9),   # Inflammation → wall stress   (nominal 0.9)
+    "a3": (0.1, 0.7),   # Integrity suppresses stress   (nominal 0.7)
+    "b1": (0.1, 0.8),   # Normal shape → integrity      (nominal 0.6)
+    "b2": (0.1, 0.8),   # Inflammation degrades integr. (nominal 0.8)
+    "b3": (0.05, 0.3),  # Passive integrity decay       (nominal 0.2)
+    "c1": (0.2, 1.0),   # Low shear → inflammation      (nominal 1.0)
+    "c2": (0.2, 0.8),   # Haemodynamic stress → inflam. (nominal 0.7)
+    "c3": (0.1, 0.9),   # Natural inflammation resolution(nominal 0.9)
+}
+
+# Number of Optuna trials (50 minimum per plan; raise to 100 if time allows)
+PHASE2_N_TRIALS = 50
+
+# Output directory for Phase 2 results (separate from Phase 1 results/)
+PHASE2_RESULTS_DIR = os.path.join("results", "phase2")
+os.makedirs(PHASE2_RESULTS_DIR, exist_ok=True)

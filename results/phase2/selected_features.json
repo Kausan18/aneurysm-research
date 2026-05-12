@@ -1,0 +1,26 @@
+{
+  "selected_features": [
+    "minRadius",
+    "vesselDiameter",
+    "meanRadius",
+    "maxRadius",
+    "tortuosity",
+    "length",
+    "maxCurvature",
+    "meanCurvature",
+    "sizeRatio_star",
+    "aspectRatio_star",
+    "ostiumShapeFactor",
+    "ellipsoidMinSemiaxis",
+    "sacVolume",
+    "r0",
+    "r_end",
+    "delta_r",
+    "i_max",
+    "AUC_i",
+    "c_min",
+    "c_end",
+    "I",
+    "I_dur"
+  ]
+}

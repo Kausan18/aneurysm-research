@@ -1,0 +1,13 @@
+FeatureSet,Model,AUC,Accuracy,F1,Balanced_Accuracy_default,Balanced_Accuracy_tuned,Threshold_mean
+Baseline,Logistic Regression,0.708 ± 0.116,0.631,0.607,0.638,0.737,0.502
+Baseline,Random Forest,0.664 ± 0.086,0.647,0.504,0.621,0.696,0.456
+Baseline,Gradient Boosting,0.610 ± 0.114,0.573,0.478,0.560,0.670,0.594
+ODE-only,Logistic Regression,0.676 ± 0.103,0.612,0.596,0.620,0.712,0.489
+ODE-only,Random Forest,0.637 ± 0.113,0.599,0.506,0.589,0.678,0.488
+ODE-only,Gradient Boosting,0.614 ± 0.109,0.557,0.468,0.549,0.672,0.406
+Hybrid,Logistic Regression,0.715 ± 0.114,0.624,0.605,0.633,0.740,0.532
+Hybrid,Random Forest,0.671 ± 0.086,0.638,0.550,0.626,0.688,0.450
+Hybrid,Gradient Boosting,0.642 ± 0.111,0.605,0.501,0.590,0.683,0.430
+Hybrid-RFECV,Logistic Regression,0.716 ± 0.115,0.624,0.605,0.633,0.740,0.532
+Hybrid-RFECV,Random Forest,0.663 ± 0.089,0.615,0.501,0.598,0.689,0.473
+Hybrid-RFECV,Gradient Boosting,0.633 ± 0.111,0.602,0.494,0.586,0.683,0.454
