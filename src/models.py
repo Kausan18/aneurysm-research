@@ -7,7 +7,10 @@ Revised for Merged_Aneurysm.csv:
   Reduces AUC std from ±0.15 to ~±0.06 on n=103.
 - SMOTE: DISABLED by default (44 minority / ~7 per fold → k=3 risky).
   Set USE_SMOTE = True only after base metrics confirmed > 0.50.
-- Classifiers: LR (balanced), RF (balanced), GBM (sample_weight)
+- Classifiers: LR (balanced), RF (balanced, optionally calibrated), GBM (sample_weight)
+- Phase 2: USE_CALIBRATION=True wraps RF with CalibratedClassifierCV(isotonic, cv=3)
+  This fixes RF Threshold=inf seen in ODE-only Phase 1 results (small-dataset
+  probability miscalibration — known RF weakness).
 - Threshold tuning: Youden's J per fold → Balanced_Accuracy_default + _tuned
 - Metrics: AUC ± std, Accuracy, F1, Balanced_Accuracy_default,
            Balanced_Accuracy_tuned, Threshold_mean
@@ -18,6 +21,7 @@ import pandas as pd
 from sklearn.model_selection import RepeatedStratifiedKFold
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
+from sklearn.calibration import CalibratedClassifierCV
 from sklearn.utils.class_weight import compute_sample_weight
 from sklearn.metrics import (
     roc_auc_score, accuracy_score, f1_score,
@@ -27,6 +31,12 @@ from sklearn.metrics import (
 # ── SMOTE: disabled by default ────────────────────────────────────────────────
 # Re-enable only after confirming base AUC > 0.50 on all feature sets.
 USE_SMOTE = False
+
+# ── Phase 2: RF probability calibration ──────────────────────────────────────
+# CalibratedClassifierCV(isotonic, cv=3) maps raw RF probabilities to better-
+# calibrated values, fixing the Threshold=inf issue on this small dataset.
+# Set False to reproduce exact Phase 1 behaviour with uncalibrated RF.
+USE_CALIBRATION = True
 
 try:
     from imblearn.over_sampling import SMOTE
@@ -82,6 +92,20 @@ def train_and_evaluate(X, y, n_splits=5, n_repeats=3, random_state=42):
     )
 
     # ── Classifiers (imbalance handling built-in) ─────────────────────────────
+    _rf_base = RandomForestClassifier(
+        n_estimators=100,
+        random_state=random_state,
+        class_weight="balanced",
+    )
+    # Phase 2: wrap RF with isotonic calibration to fix Threshold=inf on small
+    # datasets.  cv=3 gives ~55 training / ~27 calibration samples per internal
+    # fold on our 82-sample training folds — sufficient for isotonic regression.
+    _rf_clf = (
+        CalibratedClassifierCV(_rf_base, method="isotonic", cv=3)
+        if USE_CALIBRATION
+        else _rf_base
+    )
+
     classifiers = {
         "Logistic Regression": LogisticRegression(
             penalty="l2",
@@ -90,11 +114,7 @@ def train_and_evaluate(X, y, n_splits=5, n_repeats=3, random_state=42):
             random_state=random_state,
             class_weight="balanced",
         ),
-        "Random Forest": RandomForestClassifier(
-            n_estimators=100,
-            random_state=random_state,
-            class_weight="balanced",
-        ),
+        "Random Forest": _rf_clf,
         "Gradient Boosting": GradientBoostingClassifier(
             n_estimators=100,
             random_state=random_state,
@@ -176,7 +196,8 @@ def train_and_evaluate(X, y, n_splits=5, n_repeats=3, random_state=42):
               f"{total_folds} folds)")
 
     smote_status = "on" if (USE_SMOTE and _SMOTE_AVAILABLE) else "off"
+    cal_status   = "on" if USE_CALIBRATION else "off"
     print(f"[OK] Training complete for {X.shape[1] if hasattr(X, 'shape') else '?'} "
-          f"features (SMOTE={smote_status}, threshold_tuning=on, "
-          f"{n_splits}×{n_repeats} RepeatedStratifiedKFold).")
+          f"features (SMOTE={smote_status}, RF_calibration={cal_status}, "
+          f"threshold_tuning=on, {n_splits}×{n_repeats} RepeatedStratifiedKFold).")
     return pd.DataFrame(results)
