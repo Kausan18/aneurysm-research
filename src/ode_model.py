@@ -3,11 +3,26 @@ ode_model.py
 Paper mapping: Sections II.D-E, III
 
 ODE system is UNCHANGED (Paper Eq. 5-7).
-Revisions applied:
-  - Revised initial conditions: r0 = 0.3*S_REF + 0.7*S[idx]  (Bug 2 fix)
-    where S_REF = 10th percentile of S (data-derived population anchor)
-  - 10 biomarkers including continuous I variants (Bug 3 fix)
-  - Accepts optional params dict for Phase 2 Bayesian optimisation
+
+FIX: r0 now uses Paper Eq. 8 correctly:
+    r0 = 0.3 * SR_n + 0.7 * AR_n
+    where SR_n = MinMax-normalised sizeRatio_star
+          AR_n = MinMax-normalised aspectRatio_star
+
+Previous code had r0 = 0.3*S_REF + 0.7*S[idx] which blended the composite
+surrogate S with itself (via a population anchor) -- not in the paper at all.
+The paper uses SR_n and AR_n as *separate* inputs to r0, not the same S twice.
+
+The S_REF population anchor is removed entirely.
+
+simulate_and_extract() accepts AR_n and SR_n as explicit parameters so both
+Phase 1 and Phase 2 callers can pass them in.
+
+10 biomarkers extracted:
+  r0, r_end, delta_r, i_max, AUC_i, c_min, c_end,
+  I  (continuous mean excess ratio),
+  I_dur (fraction of time i > c),
+  I_auc (trapz area of excess curve)
 """
 
 import numpy as np
@@ -29,7 +44,7 @@ def aneurysm_ode(t, state, L_val, H_val, S_val, params):
     return [dr_dt, dc_dt, di_dt]
 
 
-def simulate_and_extract(L, H, S, params=None):
+def simulate_and_extract(L, H, S, params=None, AR_n=None, SR_n=None):
     """Simulate ODE for all patients and extract 10 biomarkers (Paper Section III).
 
     Parameters
@@ -37,45 +52,49 @@ def simulate_and_extract(L, H, S, params=None):
     L, H, S : np.ndarray (n_patients,)
         Geometry-derived surrogates in [0, 1].
     params  : dict or None
-        ODE coefficient dict. If None, uses NOMINAL_PARAMS from config.
+        ODE coefficient dict. Defaults to NOMINAL_PARAMS from config.
+    AR_n    : np.ndarray (n_patients,)
+        MinMax-normalised aspectRatio_star. Used for r0 per Paper Eq. 8.
+        Pass from preprocess_features() return value.
+    SR_n    : np.ndarray (n_patients,)
+        MinMax-normalised sizeRatio_star. Used for r0 per Paper Eq. 8.
+        Pass from preprocess_features() return value.
 
     Returns
     -------
-    biomarkers : dict
-        10 keys, each a Python list of length n_patients:
-          r0, r_end, delta_r, i_max, AUC_i, c_min, c_end,
-          I (continuous mean excess ratio),
-          I_dur (fraction of time i > c),
-          I_auc (trapz area of excess curve)
+    biomarkers : dict with 10 keys, each a list of length n_patients:
+        r0, r_end, delta_r, i_max, AUC_i, c_min, c_end, I, I_dur, I_auc
     """
     if params is None:
         params = NOMINAL_PARAMS
 
     n_patients = len(L)
 
-    # ── Data-derived population anchor (Bug 2 fix) ────────────────────────────
-    # S_REF = 10th percentile of S across the cohort.
-    # This anchors r0 to the population, making the blend r0 = 0.3*S_REF + 0.7*S[idx]
-    # meaningful (previously was 0.3*S[idx] + 0.7*S[idx] = S[idx], a no-op).
-    S_REF = float(np.percentile(S, 10))
-    print(f"[INFO] S_REF (10th percentile of S) = {S_REF:.4f}")
+    # Validate AR_n / SR_n -- both are required for correct Eq. 8
+    if AR_n is None or SR_n is None:
+        raise ValueError(
+            "[ode_model] AR_n and SR_n are required for r0 = 0.3*SR_n + 0.7*AR_n "
+            "(Paper Eq. 8). Pass them from preprocess_features()."
+        )
+
+    print("[INFO] r0 = 0.3*SR_n + 0.7*AR_n  (Paper Eq. 8 -- correct)")
 
     biomarkers = {
         "r0":    [], "r_end":  [], "delta_r": [],
         "i_max": [], "AUC_i":  [],
         "c_min": [], "c_end":  [],
-        "I":     [],   # Bug 3 fix  — continuous mean excess ratio (replaces binary)
-        "I_dur": [],   # Bug 3 opt  — fraction of time i > c
-        "I_auc": [],   # Bug 3 opt  — area under excess curve
+        "I":     [],   # continuous mean excess ratio
+        "I_dur": [],   # fraction of time i > c
+        "I_auc": [],   # area under excess curve
     }
 
     t_eval = np.linspace(0, 1, 100)
 
     for idx in range(n_patients):
-        # ── Revised initial conditions (Bug 2 fix) ────────────────────────────
-        r0 = 0.3 * S_REF + 0.7 * S[idx]   # meaningful population/individual blend
-        c0 = 1.0                            # healthy wall integrity at t=0
-        i0 = 0.5 * (L[idx] + H[idx])       # initial inflammation from surrogates
+        # Paper Eq. 8-10: initial conditions
+        r0 = 0.3 * SR_n[idx] + 0.7 * AR_n[idx]   # Eq. 8 CORRECT
+        c0 = 1.0                                    # Eq. 9
+        i0 = 0.5 * (L[idx] + H[idx])              # Eq. 10
         y0 = [r0, c0, i0]
 
         sol = solve_ivp(
@@ -89,15 +108,12 @@ def simulate_and_extract(L, H, S, params=None):
 
         r_t, c_t, i_t = sol.sol(t_eval)
 
-        # ── Continuous I biomarkers (Bug 3 fix) ───────────────────────────────
-        # excess(t) = max(0, i(t) - c(t))
-        excess = np.maximum(0.0, i_t - c_t)
+        # Continuous I biomarkers
+        excess       = np.maximum(0.0, i_t - c_t)
+        I_mean_ratio = float(np.mean(excess / (c_t + 1e-8)))
+        I_dur        = float(np.mean(i_t > c_t))
+        I_auc        = float(trapezoid(excess, t_eval))
 
-        I_mean_ratio = float(np.mean(excess / (c_t + 1e-8)))   # mean excess ratio
-        I_dur        = float(np.mean(i_t > c_t))               # fraction time i > c
-        I_auc        = float(trapezoid(excess, t_eval))         # total excess burden
-
-        # ── Standard biomarkers ───────────────────────────────────────────────
         biomarkers["r0"].append(float(r_t[0]))
         biomarkers["r_end"].append(float(r_t[-1]))
         biomarkers["delta_r"].append(float(r_t[-1] - r_t[0]))
@@ -105,11 +121,9 @@ def simulate_and_extract(L, H, S, params=None):
         biomarkers["AUC_i"].append(float(trapezoid(i_t, t_eval)))
         biomarkers["c_min"].append(float(np.min(c_t)))
         biomarkers["c_end"].append(float(c_t[-1]))
-
-        # ── I biomarkers ──────────────────────────────────────────────────────
         biomarkers["I"].append(I_mean_ratio)
         biomarkers["I_dur"].append(I_dur)
         biomarkers["I_auc"].append(I_auc)
 
-    print(f"[OK] ODE simulation complete: 10 biomarkers × {n_patients} patients.")
+    print(f"[OK] ODE simulation complete: 10 biomarkers x {n_patients} patients.")
     return biomarkers

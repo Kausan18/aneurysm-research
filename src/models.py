@@ -2,18 +2,18 @@
 models.py
 Paper mapping: Section IV.D
 
-Revised for Merged_Aneurysm.csv:
-- RepeatedStratifiedKFold(n_splits=5, n_repeats=3)  → 15 total folds
-  Reduces AUC std from ±0.15 to ~±0.06 on n=103.
-- SMOTE: DISABLED by default (44 minority / ~7 per fold → k=3 risky).
-  Set USE_SMOTE = True only after base metrics confirmed > 0.50.
-- Classifiers: LR (balanced), RF (balanced, optionally calibrated), GBM (sample_weight)
-- Phase 2: USE_CALIBRATION=True wraps RF with CalibratedClassifierCV(isotonic, cv=3)
-  This fixes RF Threshold=inf seen in ODE-only Phase 1 results (small-dataset
-  probability miscalibration — known RF weakness).
-- Threshold tuning: Youden's J per fold → Balanced_Accuracy_default + _tuned
-- Metrics: AUC ± std, Accuracy, F1, Balanced_Accuracy_default,
-           Balanced_Accuracy_tuned, Threshold_mean
+Phase 1 settings:
+- USE_CALIBRATION = False   <-- Phase 2 feature only; OFF for clean Phase 1
+- USE_SMOTE       = False   <-- disabled (44 minority / ~7 per fold is too few)
+
+Classifiers: LR (balanced), RF (balanced, no calibration), GBM (sample_weight)
+CV: RepeatedStratifiedKFold(n_splits=5, n_repeats=3) -> 15 folds
+Threshold tuning: Youden's J per fold
+Metrics: AUC +- std, Accuracy, F1, Balanced_Accuracy_default,
+         Balanced_Accuracy_tuned, Threshold_mean
+
+NOTE FOR PHASE 2: set USE_CALIBRATION = True before running main_phase2.py
+to re-enable isotonic RF calibration (fixes inf thresholds on small datasets).
 """
 
 import numpy as np
@@ -28,15 +28,12 @@ from sklearn.metrics import (
     balanced_accuracy_score, roc_curve,
 )
 
-# ── SMOTE: disabled by default ────────────────────────────────────────────────
-# Re-enable only after confirming base AUC > 0.50 on all feature sets.
+# SMOTE: disabled (too few minority samples per fold on n=103)
 USE_SMOTE = False
 
-# ── Phase 2: RF probability calibration ──────────────────────────────────────
-# CalibratedClassifierCV(isotonic, cv=3) maps raw RF probabilities to better-
-# calibrated values, fixing the Threshold=inf issue on this small dataset.
-# Set False to reproduce exact Phase 1 behaviour with uncalibrated RF.
-USE_CALIBRATION = True
+# RF calibration: OFF for Phase 1.
+# Set True in Phase 2 to fix inf thresholds via CalibratedClassifierCV(isotonic).
+USE_CALIBRATION = False
 
 try:
     from imblearn.over_sampling import SMOTE
@@ -44,12 +41,10 @@ try:
 except ImportError:
     _SMOTE_AVAILABLE = False
     if USE_SMOTE:
-        print("[WARN] imbalanced-learn not installed — SMOTE skipped. "
-              "Install with: pip install imbalanced-learn")
+        print("[WARN] imbalanced-learn not installed -- SMOTE skipped.")
 
 
 def _apply_smote(X_tr, y_tr, random_state=42):
-    """Apply SMOTE only when enabled and minority class has enough samples."""
     if not USE_SMOTE or not _SMOTE_AVAILABLE:
         return X_tr, y_tr
     minority_count = int(np.sum(y_tr == 1))
@@ -61,7 +56,7 @@ def _apply_smote(X_tr, y_tr, random_state=42):
 
 
 def _best_threshold_youden(y_true, y_prob):
-    """Return threshold maximising Youden's J = Sensitivity + Specificity − 1."""
+    """Return threshold maximising Youden's J = Sensitivity + Specificity - 1."""
     fpr, tpr, thresholds = roc_curve(y_true, y_prob)
     j_scores = tpr - fpr
     best_idx = int(np.argmax(j_scores))
@@ -73,15 +68,15 @@ def train_and_evaluate(X, y, n_splits=5, n_repeats=3, random_state=42):
 
     Parameters
     ----------
-    X            : pd.DataFrame or np.ndarray — feature matrix
-    y            : np.ndarray (int)           — binary labels
-    n_splits     : int — inner fold count (default 5)
-    n_repeats    : int — repetitions (default 3) → 15 total evaluations
+    X            : pd.DataFrame or np.ndarray
+    y            : np.ndarray (int) -- binary labels
+    n_splits     : int -- inner fold count (default 5)
+    n_repeats    : int -- repetitions (default 3) -> 15 total evaluations
     random_state : int
 
     Returns
     -------
-    pd.DataFrame with one row per classifier and columns:
+    pd.DataFrame with columns:
         Model, AUC, Accuracy, F1,
         Balanced_Accuracy_default, Balanced_Accuracy_tuned, Threshold_mean
     """
@@ -91,15 +86,11 @@ def train_and_evaluate(X, y, n_splits=5, n_repeats=3, random_state=42):
         random_state=random_state,
     )
 
-    # ── Classifiers (imbalance handling built-in) ─────────────────────────────
     _rf_base = RandomForestClassifier(
         n_estimators=100,
         random_state=random_state,
         class_weight="balanced",
     )
-    # Phase 2: wrap RF with isotonic calibration to fix Threshold=inf on small
-    # datasets.  cv=3 gives ~55 training / ~27 calibration samples per internal
-    # fold on our 82-sample training folds — sufficient for isotonic regression.
     _rf_clf = (
         CalibratedClassifierCV(_rf_base, method="isotonic", cv=3)
         if USE_CALIBRATION
@@ -108,7 +99,6 @@ def train_and_evaluate(X, y, n_splits=5, n_repeats=3, random_state=42):
 
     classifiers = {
         "Logistic Regression": LogisticRegression(
-            penalty="l2",
             solver="lbfgs",
             max_iter=1000,
             random_state=random_state,
@@ -118,7 +108,6 @@ def train_and_evaluate(X, y, n_splits=5, n_repeats=3, random_state=42):
         "Gradient Boosting": GradientBoostingClassifier(
             n_estimators=100,
             random_state=random_state,
-            # No class_weight param → use sample_weight in .fit() below
         ),
     }
 
@@ -137,12 +126,10 @@ def train_and_evaluate(X, y, n_splits=5, n_repeats=3, random_state=42):
             X_te     = X.iloc[test_idx]  if hasattr(X, "iloc") else X[test_idx]
             y_tr_raw, y_te = y[train_idx], y[test_idx]
 
-            # SMOTE (disabled by default — 7 minority per fold is too small)
             X_tr, y_tr = _apply_smote(
                 X_tr_raw, y_tr_raw, random_state=random_state + fold_idx
             )
 
-            # Fit — GBM needs sample_weight; LR & RF use class_weight='balanced'
             if name == "Gradient Boosting":
                 sw = compute_sample_weight("balanced", y_tr)
                 clf.fit(X_tr, y_tr, sample_weight=sw)
@@ -152,13 +139,10 @@ def train_and_evaluate(X, y, n_splits=5, n_repeats=3, random_state=42):
             y_pred = clf.predict(X_te)
             y_prob = clf.predict_proba(X_te)[:, 1]
 
-            # AUC sanity check — if <0.50 the class order may be inverted
             auc_val = roc_auc_score(y_te, y_prob)
             if auc_val < 0.50:
-                print(f"[WARN] {name} fold {fold_idx}: AUC={auc_val:.3f} < 0.50 "
-                      "— possible class inversion, check predict_proba column order.")
+                print(f"[WARN] {name} fold {fold_idx}: AUC={auc_val:.3f} < 0.50")
 
-            # Threshold tuning via Youden's J
             best_thr     = _best_threshold_youden(y_te, y_prob)
             y_pred_tuned = (y_prob >= best_thr).astype(int)
 
@@ -177,7 +161,7 @@ def train_and_evaluate(X, y, n_splits=5, n_repeats=3, random_state=42):
         results.append({
             "Model": name,
             "AUC":
-                f"{np.mean(fold_metrics['AUC']):.3f} ± "
+                f"{np.mean(fold_metrics['AUC']):.3f} +- "
                 f"{np.std(fold_metrics['AUC']):.3f}",
             "Accuracy":
                 f"{np.mean(fold_metrics['Accuracy']):.3f}",
@@ -192,12 +176,13 @@ def train_and_evaluate(X, y, n_splits=5, n_repeats=3, random_state=42):
         })
         print(f"[OK] {name}: AUC="
               f"{np.mean(fold_metrics['AUC']):.3f} "
-              f"(±{np.std(fold_metrics['AUC']):.3f}, "
+              f"(+-{np.std(fold_metrics['AUC']):.3f}, "
               f"{total_folds} folds)")
 
     smote_status = "on" if (USE_SMOTE and _SMOTE_AVAILABLE) else "off"
     cal_status   = "on" if USE_CALIBRATION else "off"
-    print(f"[OK] Training complete for {X.shape[1] if hasattr(X, 'shape') else '?'} "
-          f"features (SMOTE={smote_status}, RF_calibration={cal_status}, "
-          f"threshold_tuning=on, {n_splits}×{n_repeats} RepeatedStratifiedKFold).")
+    n_feat = X.shape[1] if hasattr(X, "shape") else "?"
+    print(f"[OK] Training complete for {n_feat} features "
+          f"(SMOTE={smote_status}, RF_calibration={cal_status}, "
+          f"threshold_tuning=on, {n_splits}x{n_repeats} RepeatedStratifiedKFold).")
     return pd.DataFrame(results)
