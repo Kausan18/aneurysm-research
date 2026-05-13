@@ -3,9 +3,9 @@ features.py
 Paper mapping: Section IV.C
 
 Constructs three explicit, non-overlapping feature sets:
-  Set 1 — Baseline:  geometry/morphological columns (MinMax-scaled, 13 features)
+  Set 1 — Baseline:  geometry/morphological + WSS_mean columns (MinMax-scaled, 14 features)
   Set 2 — ODE-only:  10 biomarkers extracted from ODE simulation
-  Set 3 — Hybrid:    concatenation of Set 1 + Set 2 (23 features)
+  Set 3 — Hybrid:    concatenation of Set 1 + Set 2 (24 features)
 
 CRITICAL: shape assertions guard against the silent concat-bug (identical sets).
 """
@@ -21,14 +21,14 @@ def build_feature_sets(
 
     Parameters
     ----------
-    X_baseline_df   : pd.DataFrame — shape (n, 13)  MinMax-scaled geometry features
+    X_baseline_df   : pd.DataFrame — shape (n, 14)  MinMax-scaled geometry + WSS features
     biomarkers_dict : dict          — 10-key dict, each value is a list of length n
 
     Returns
     -------
-    X_baseline : pd.DataFrame — (n, 13)
+    X_baseline : pd.DataFrame — (n, 14)
     X_ode      : pd.DataFrame — (n, 10)
-    X_hybrid   : pd.DataFrame — (n, 23)
+    X_hybrid   : pd.DataFrame — (n, 24)
     """
     bio_df = pd.DataFrame(biomarkers_dict)
 

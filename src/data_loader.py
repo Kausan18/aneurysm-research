@@ -2,13 +2,15 @@
 data_loader.py
 Paper mapping: Section IV.A
 
-Loads Merged_Aneurysm.csv (103 patients, 44R / 59U).
+Loads Merged_Aneurysm.csv (103 patients, 44R / 59U) and joins with Aneurysm_WSS_values_clean.csv.
 - Encodes target:   ruptureStatus  R=1, U=0
 - Encodes location: one-hot (ICA/MCA/ACA/BAS)
 - Encodes type:     binary TER=1, LAT=0
 - Encodes sex:      binary F=1, M=0
 - Drops CFD columns (95/103 missing -- do NOT impute)
 - Drops ID / duplicate columns
+- Joins with Aneurysm_WSS_values_clean.csv on case_id
+- Renames WSS_mean_dyn_cm2 to WSS_mean for use as H surrogate
 
 FIX: ruptureStatus is always a string dtype ('R'/'U') in this CSV.
      Previous code had an else-branch that tried .astype(int) directly on
@@ -22,7 +24,7 @@ from config import DATA_DIR, CFD_DROP_COLS, ID_DROP_COLS
 
 
 def load_data():
-    """Load and clean Merged_Aneurysm.csv.
+    """Load and clean Merged_Aneurysm.csv, then join with WSS data.
 
     Returns
     -------
@@ -30,15 +32,30 @@ def load_data():
         Cleaned dataframe with:
         - `y` column (int): 1 = ruptured, 0 = unruptured
         - All geometry / morphological features present
+        - WSS_mean column (from Aneurysm_WSS_values_clean.csv)
         - CFD and ID columns removed
         - Categorical features encoded
     y  : np.ndarray (int, shape [103])
         Binary rupture label.
     """
+    # Load main dataset
     csv_path = os.path.join(DATA_DIR, "Merged_Aneurysm.csv")
     df = pd.read_csv(csv_path)
 
     print(f"[OK] Loaded {csv_path}: {df.shape[0]} rows x {df.shape[1]} columns")
+
+    # Load WSS data and join
+    wss_path = os.path.join(DATA_DIR, "Aneurysm_WSS_values_clean.csv")
+    wss_df = pd.read_csv(wss_path)
+    print(f"[OK] Loaded {wss_path}: {wss_df.shape[0]} rows x {wss_df.shape[1]} columns")
+
+    # Inner join on case_id
+    df = pd.merge(df, wss_df[["case_id", "WSS_mean_dyn_cm2"]], on="case_id", how="inner")
+    print(f"[OK] Joined on case_id: {df.shape[0]} rows after inner join")
+
+    # Rename WSS column for clarity
+    df.rename(columns={"WSS_mean_dyn_cm2": "WSS_mean"}, inplace=True)
+    print(f"[OK] Renamed WSS_mean_dyn_cm2 to WSS_mean")
 
     # 1. Drop CFD columns (95/103 missing -- cannot impute)
     cols_to_drop = [c for c in CFD_DROP_COLS if c in df.columns]
