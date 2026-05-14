@@ -6,7 +6,7 @@ Revised for Merged_Aneurysm.csv with WSS integration:
 - Imputes 2 missing ellipsoidMinSemiaxis rows with column median
 - Scales baseline feature set with MinMaxScaler
 - Computes surrogates L, H, S:
-    S = 0.025 * AR_n  + 0.975 * SR_n          (data-derived weights)
+    S = 0.5 * AR_n  + 0.5 * SR_n              (Phase-1 equal weights, Paper Eq. 4)
     L = MinMax(tortuosity_n / (minRadius_n + e)) (LSA proxy, r=-0.201)
     H = MinMax(WSS_mean)                         (actual WSS data, replaces geometry proxy)
 
