@@ -33,7 +33,7 @@ USE_SMOTE = False
 
 # RF calibration: OFF for Phase 1.
 # Set True in Phase 2 to fix inf thresholds via CalibratedClassifierCV(isotonic).
-USE_CALIBRATION = False
+USE_CALIBRATION = True  # <-- PHASE 2 ENABLED
 
 try:
     from imblearn.over_sampling import SMOTE

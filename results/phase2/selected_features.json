@@ -1,6 +1,6 @@
 {
+  "n_selected": 21,
   "selected_features": [
-    "minRadius",
     "vesselDiameter",
     "meanRadius",
     "maxRadius",
@@ -13,6 +13,7 @@
     "ostiumShapeFactor",
     "ellipsoidMinSemiaxis",
     "sacVolume",
+    "WSS_mean",
     "r0",
     "r_end",
     "delta_r",
@@ -20,7 +21,6 @@
     "AUC_i",
     "c_min",
     "c_end",
-    "I",
-    "I_dur"
+    "I_auc"
   ]
 }

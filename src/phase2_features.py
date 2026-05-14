@@ -57,10 +57,10 @@ def select_features_rfecv(
     X_ode_sel      : pd.DataFrame — ODE biomarker columns surviving selection
     X_hybrid_sel   : pd.DataFrame — concat of the two selected subsets
     selected_cols  : list[str]    — names of all surviving features
-    rfecv_support  : np.ndarray   — boolean mask over X_hybrid.columns
+    rfecv_support  : np.ndarray   -- boolean mask over X_hybrid.columns
     """
     print(f"\n[Phase 2 Features] Running RFECV on hybrid set "
-          f"({X_hybrid.shape[1]} features → target ≥ {min_features})...")
+          f"({X_hybrid.shape[1]} features -> target >= {min_features})...")
 
     # ── RFECV estimator: RF with balanced class weights ───────────────────────
     rf_estimator = RandomForestClassifier(
@@ -128,7 +128,7 @@ def select_features_rfecv(
     print(f"  ODE-sel      : {X_ode_sel.shape}")
     print(f"  Hybrid-sel   : {X_hybrid_sel.shape}")
 
-    return X_baseline_sel, X_ode_sel, X_hybrid_sel, selected_cols, support
+    return X_baseline_sel, X_ode_sel, X_hybrid_sel, selected_cols, len(selected_cols)
 
 
 def print_feature_importance_ranking(X_hybrid: pd.DataFrame,

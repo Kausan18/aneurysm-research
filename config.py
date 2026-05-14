@@ -32,10 +32,10 @@ NOMINAL_PARAMS = {
 # S = S_ar * AR_n + S_sr * SR_n
 #   Derived via logistic regression on this cohort:
 #   SR (r=+0.196, p=0.048) dominates; AR (r=+0.046, p=0.642) near-zero.
-# L = MinMax(tortuosity_n / (minRadius_n + 1e-8))
-#   Proxy for LSA (unavailable); r=−0.201, p=0.042 with rupture.
-# H = MinMax(maxCurvature_n * tortuosity_n)
-#   Proxy for WSS×OSI; r=−0.265, p=0.007 with rupture.
+# L = MinMax(1 - WSS_n)
+#   Low-shear damage: low WSS -> high damage risk; WSS from Aneurysm_WSS_values_clean.csv.
+# H = MinMax(WSS_mean)
+#   High-shear damage driver from Aneurysm_WSS_values_clean.csv.
 SURROGATE_WEIGHTS = {
     "S_ar": 0.025,   # logistic-regression weight for AR_n
     "S_sr": 0.975,   # logistic-regression weight for SR_n
@@ -71,10 +71,11 @@ COLUMN_MAP = {
 }
 
 # ── Baseline Feature Columns (Set 1) ─────────────────────────────────────────
-# These 13 geometry/morphological columns form the baseline feature set.
-# ellipsoidMinSemiaxis has 2 missing rows → imputed with median in preprocessing.
+# These 13 geometry/morphological + hemodynamic columns form the baseline feature set.
+# ellipsoidMinSemiaxis has 2 missing rows -> imputed with median in preprocessing.
+# WSS_mean is now the hemodynamic driver, sourced from Aneurysm_WSS_values_clean.csv.
+# (Replaced minRadius proxy with real mean WSS values.)
 BASELINE_FEATURES = [
-    "minRadius",
     "vesselDiameter",
     "meanRadius",
     "maxRadius",
@@ -87,9 +88,10 @@ BASELINE_FEATURES = [
     "ostiumShapeFactor",
     "ellipsoidMinSemiaxis",
     "sacVolume",
+    "WSS_mean",
 ]
 
-# ── CFD Columns to Drop (95/103 missing — not usable) ─────────────────────────
+# -- CFD Columns to Drop (95/103 missing -- not usable) ----------------
 CFD_DROP_COLS = [
     "sacMinPressure", "sacMaxPressure", "sacMeanPressure",
     "sacMaxSpeed",    "sacMeanSpeed",
@@ -106,22 +108,21 @@ ID_DROP_COLS = ["case_id", "patient_id", "vesselName"]
 
 # ── Phase 2: Optuna Search Space ──────────────────────────────────────────────
 # Each key maps to (low, high) inclusive bounds for TPE continuous search.
-# Ranges centred on NOMINAL_PARAMS with physiologically meaningful limits.
-# Plan of Action — Table in Section 3.2.
+# All parameters [0.1, 2.0] except b3 [0.01, 1.0] per specification.
 PHASE2_PARAM_BOUNDS = {
-    "a1": (0.1, 1.0),   # Shape → wall stress          (nominal 0.8)
-    "a2": (0.1, 0.9),   # Inflammation → wall stress   (nominal 0.9)
-    "a3": (0.1, 0.7),   # Integrity suppresses stress   (nominal 0.7)
-    "b1": (0.1, 0.8),   # Normal shape → integrity      (nominal 0.6)
-    "b2": (0.1, 0.8),   # Inflammation degrades integr. (nominal 0.8)
-    "b3": (0.05, 0.3),  # Passive integrity decay       (nominal 0.2)
-    "c1": (0.2, 1.0),   # Low shear → inflammation      (nominal 1.0)
-    "c2": (0.2, 0.8),   # Haemodynamic stress → inflam. (nominal 0.7)
-    "c3": (0.1, 0.9),   # Natural inflammation resolution(nominal 0.9)
+    "a1": (0.1, 2.0),   # Shape -> wall stress          (nominal 0.8)
+    "a2": (0.1, 2.0),   # Inflammation -> wall stress   (nominal 0.9)
+    "a3": (0.1, 2.0),   # Integrity suppresses stress   (nominal 0.7)
+    "b1": (0.1, 2.0),   # Normal shape -> integrity      (nominal 0.6)
+    "b2": (0.1, 2.0),   # Inflammation degrades integr. (nominal 0.8)
+    "b3": (0.01, 1.0),  # Passive integrity decay       (nominal 0.2)
+    "c1": (0.1, 2.0),   # Low shear -> inflammation      (nominal 1.0)
+    "c2": (0.1, 2.0),   # Haemodynamic stress -> inflam. (nominal 0.7)
+    "c3": (0.1, 2.0),   # Natural inflammation resolution(nominal 0.9)
 }
 
-# Number of Optuna trials (50 minimum per plan; raise to 100 if time allows)
-PHASE2_N_TRIALS = 50
+# Number of Optuna trials (80 per plan; 50 minimum per previous versions)
+PHASE2_N_TRIALS = 80
 
 # Output directory for Phase 2 results (separate from Phase 1 results/)
 PHASE2_RESULTS_DIR = os.path.join("results", "phase2")

@@ -6,9 +6,9 @@ Expands the single-term L and H surrogates to weighted multi-term combinations,
 then learns the optimal weights via LogisticRegression (same approach used to
 derive S weights in Phase 1).
 
-  L_expanded = w1*tortuosity_n + w2*(1/minRadius_n) + w3*length_n
-               (tortuosity carries LSA signal; 1/minRadius amplifies narrow-vessel
-               damage; length captures vessel complexity)
+  L_expanded = w1*tortuosity_n + w2*(1-WSS_n) + w3*length_n
+               (tortuosity carries flow disturbance; (1-WSS_n) represents low-shear
+               damage from Aneurysm_WSS_values_clean.csv; length captures vessel complexity)
 
   H_expanded = w1*maxCurvature_n + w2*tortuosity_n + w3*meanCurvature_n
                (maxCurvature is the primary WSS×OSI proxy; meanCurvature adds
@@ -86,7 +86,7 @@ def refine_surrogate_weights(df: pd.DataFrame,
     """
     # ── Columns used for surrogate expansion ─────────────────────────────────
     # All must exist in Merged_Aneurysm.csv — verified against BASELINE_FEATURES
-    needed = ["tortuosity", "minRadius", "length", "maxCurvature", "meanCurvature"]
+    needed = ["tortuosity", "WSS_mean", "length", "maxCurvature", "meanCurvature"]
     missing = [c for c in needed if c not in df.columns]
     if missing:
         raise ValueError(f"[phase2_surrogates] Missing columns in df: {missing}")
@@ -95,27 +95,28 @@ def refine_surrogate_weights(df: pd.DataFrame,
     scaler   = MinMaxScaler()
     norm_arr = scaler.fit_transform(df[needed].values)
 
-    tort_n  = norm_arr[:, 0]   # tortuosity   (normalised)
-    minR_n  = norm_arr[:, 1]   # minRadius    (normalised)
-    len_n   = norm_arr[:, 2]   # length       (normalised)
-    maxC_n  = norm_arr[:, 3]   # maxCurvature (normalised)
-    meanC_n = norm_arr[:, 4]   # meanCurvature(normalised)
+    tort_n  = norm_arr[:, 0]   # tortuosity      (normalised)
+    wss_n   = norm_arr[:, 1]   # WSS_mean        (normalised)
+    len_n   = norm_arr[:, 2]   # length          (normalised)
+    maxC_n  = norm_arr[:, 3]   # maxCurvature    (normalised)
+    meanC_n = norm_arr[:, 4]   # meanCurvature   (normalised)
 
-    # inverse minRadius: narrow vessels → high low-shear damage risk
-    inv_minR_n = _minmax_1d(1.0 / (minR_n + 1e-8))
+    # Low-shear damage factor: (1 - WSS_n) means low WSS → high damage risk
+    low_wss_n = 1.0 - wss_n
 
-    # ── L expansion: {tortuosity, 1/minRadius, length} ───────────────────────
-    # Phase 1 L = minmax(tortuosity / minRadius) ≈ tort × inv_minR combination.
-    # Expanding to an additive weighted form allows data to set the balance.
-    L_candidates = np.column_stack([tort_n, inv_minR_n, len_n])
+    # ── L expansion: {tortuosity, (1-WSS), length} ──────────────────────────
+    # Phase 1 L = minmax(tortuosity / minRadius), a geometric low-shear proxy.
+    # Now using real WSS from Aneurysm_WSS_values_clean.csv: (1 - WSS_n) for low-shear damage.
+    # Additive weighted form allows data to balance the contributions.
+    L_candidates = np.column_stack([tort_n, low_wss_n, len_n])
     L_w = _fit_lr_weights(L_candidates, y, random_state=random_state)
 
-    L_raw     = L_w[0] * tort_n + L_w[1] * inv_minR_n + L_w[2] * len_n
+    L_raw     = L_w[0] * tort_n + L_w[1] * low_wss_n + L_w[2] * len_n
     L_refined = _minmax_1d(L_raw)
 
     L_weights = {
         "tortuosity":   float(L_w[0]),
-        "inv_minRadius": float(L_w[1]),
+        "low_shear_WSS": float(L_w[1]),
         "length":       float(L_w[2]),
     }
 

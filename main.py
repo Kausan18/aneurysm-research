@@ -5,14 +5,19 @@ Orchestrates the Phase 1 baseline pipeline for Merged_Aneurysm.csv.
 Pipeline:
     data_loader -> preprocessing -> ode_model -> features -> models
 
-FIXES vs original:
-  1. preprocess_features() now returns AR_n and SR_n in addition to the
-     existing X_baseline_df, L, H, S, y.
+CHANGES WITH WSS INTEGRATION:
+  1. Data loading now joins Merged_Aneurysm.csv with Aneurysm_WSS_values_clean.csv
+     on case_id and renames WSS_mean_dyn_cm2 to WSS_mean for use in pipeline.
+  2. Baseline feature set now includes WSS_mean as 14th feature (was 13 before).
+  3. H surrogate is now MinMaxNorm(WSS_mean) instead of MinMaxNorm(maxCurvature × tortuosity).
+  4. Hybrid feature set is now 24 features (14 baseline + 10 ODE) instead of 23.
+
+PREVIOUS FIXES:
+  1. preprocess_features() returns AR_n and SR_n for use in ODE r0 calculation.
   2. simulate_and_extract() is called with AR_n=AR_n, SR_n=SR_n so that
-     r0 = 0.3*SR_n + 0.7*AR_n per Paper Eq. 8 (was incorrectly using a
-     S_REF population anchor that is not in the paper).
+     r0 = 0.3*SR_n + 0.7*AR_n per Paper Eq. 8.
   3. USE_CALIBRATION=False in models.py (Phase 2 feature, not Phase 1).
-  4. ruptureStatus encoding fixed in data_loader.py (map R/U strings always).
+  4. ruptureStatus encoding fixed in data_loader.py (always map R/U strings).
 """
 
 import os
@@ -37,9 +42,9 @@ def run_diagnostics(X_baseline, X_ode, X_hybrid, L, H, S, AR_n, SR_n):
     print("=" * 60)
 
     print(f"\n[CHECK 1] Feature set shapes:")
-    print(f"  Baseline : {X_baseline.shape}  (expected ~103 x 13)")
+    print(f"  Baseline : {X_baseline.shape}  (expected ~103 x 14)")
     print(f"  ODE-only : {X_ode.shape}        (expected  103 x 10)")
-    print(f"  Hybrid   : {X_hybrid.shape}  (expected ~103 x 23)")
+    print(f"  Hybrid   : {X_hybrid.shape}  (expected ~103 x 24)")
     assert X_baseline.shape[1] != X_ode.shape[1], \
         "FAIL: Baseline == ODE shape -- concat is broken!"
     assert X_hybrid.shape[1] == X_baseline.shape[1] + X_ode.shape[1], \

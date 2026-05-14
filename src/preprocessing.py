@@ -2,13 +2,17 @@
 preprocessing.py
 Paper mapping: Sections II.C, IV.A
 
-Revised for Merged_Aneurysm.csv:
+Revised for Merged_Aneurysm.csv with WSS integration:
 - Imputes 2 missing ellipsoidMinSemiaxis rows with column median
 - Scales baseline feature set with MinMaxScaler
-- Computes REVISED surrogates L, H, S from geometry proxies:
+- Computes surrogates L, H, S:
     S = 0.025 * AR_n  + 0.975 * SR_n          (data-derived weights)
     L = MinMax(tortuosity_n / (minRadius_n + e)) (LSA proxy, r=-0.201)
-    H = MinMax(maxCurvature_n * tortuosity_n)    (WSS x OSI proxy, r=-0.265)
+    H = MinMax(WSS_mean)                         (actual WSS data, replaces geometry proxy)
+
+CHANGE: H is now directly MinMax-normalised WSS_mean from Aneurysm_WSS_values_clean.csv
+        (approximated WSS for all 103 patients), replacing the previous proxy
+        H = MinMax(maxCurvature_n * tortuosity_n).
 
 CHANGE: now also returns AR_n and SR_n (the individually MinMax-normalised
 aspectRatio_star and sizeRatio_star arrays) so that ode_model.simulate_and_extract()
@@ -31,18 +35,18 @@ def _minmax_1d(arr: np.ndarray) -> np.ndarray:
 
 
 def preprocess_features(df: pd.DataFrame):
-    """Impute, scale, and compute geometry-derived surrogates.
+    """Impute, scale, and compute geometry-derived surrogates and WSS-based H.
 
     Parameters
     ----------
     df : pd.DataFrame
-        Full cleaned dataframe from data_loader.load_data() (includes 'y').
+        Full cleaned dataframe from data_loader.load_data() (includes 'y' and 'WSS_mean').
 
     Returns
     -------
-    X_baseline_df : pd.DataFrame  -- shape (103, 13), MinMax-scaled baseline features
+    X_baseline_df : pd.DataFrame  -- shape (103, 14), MinMax-scaled baseline features (including WSS_mean)
     L             : np.ndarray    -- Low-shear damage proxy  [0, 1]
-    H             : np.ndarray    -- Haemodynamic stress proxy [0, 1]
+    H             : np.ndarray    -- Haemodynamic stress driver [0, 1] (MinMax-normalised WSS_mean)
     S             : np.ndarray    -- Shape stress surrogate   [0, 1]
     y             : np.ndarray    -- Binary rupture labels
     AR_n          : np.ndarray    -- MinMax-normalised aspectRatio_star (for Eq. 8)
@@ -50,30 +54,28 @@ def preprocess_features(df: pd.DataFrame):
     """
     y = df["y"].values if "y" in df.columns else None
 
-    # Surrogate input columns
+    # Surrogate input columns (for S; L and H now use WSS_mean directly)
     surrogate_cols = [
         "aspectRatio_star",   # AR
         "sizeRatio_star",     # SR
-        "minRadius",          # L proxy input
-        "tortuosity",         # L proxy + H proxy input
-        "maxCurvature",       # H proxy input
     ]
     X_surr_norm = MinMaxScaler().fit_transform(df[surrogate_cols].values)
-    AR_n, SR_n, minR_n, tort_n, curv_n = X_surr_norm.T
+    AR_n, SR_n = X_surr_norm.T
 
     # S -- Shape Stress (data-derived weights from logistic regression on cohort)
     S = SURROGATE_WEIGHTS["S_ar"] * AR_n + SURROGATE_WEIGHTS["S_sr"] * SR_n
 
-    # L -- Low Shear Damage proxy (r=-0.201, p=0.042)
-    L_raw = tort_n / (minR_n + 1e-8)
-    L     = _minmax_1d(L_raw)
+    # L -- Low Shear Damage (now from real WSS: low WSS → high damage risk)
+    WSS_n = _minmax_1d(df["WSS_mean"].values)  # Normalize WSS to [0, 1]
+    L = _minmax_1d(1.0 - WSS_n)  # Low-shear damage: (1 - WSS_n) from Aneurysm_WSS_values_clean.csv
 
-    # H -- Haemodynamic Stress proxy (r=-0.265, p=0.007)
-    H_raw = curv_n * tort_n
-    H     = _minmax_1d(H_raw)
+    # H -- Haemodynamic Stress driver (high-shear damage, from actual WSS_mean, MinMax-normalised)
+    H = WSS_n
 
     print(f"[OK] Surrogates computed. "
           f"S std={S.std():.4f}, L std={L.std():.4f}, H std={H.std():.4f}")
+    print(f"[OK] L is now MinMaxNorm(1 - WSS_n) -- low-shear damage from real WSS")
+    print(f"[OK] H is MinMaxNorm(WSS_n) -- high-shear damage from Aneurysm_WSS_values_clean.csv")
     print(f"[OK] AR_n std={AR_n.std():.4f}, SR_n std={SR_n.std():.4f}  "
           f"(returned for r0 = 0.3*SR_n + 0.7*AR_n per Paper Eq. 8)")
 
@@ -96,7 +98,7 @@ def preprocess_features(df: pd.DataFrame):
     X_baseline_df = pd.DataFrame(X_bl_scaled, columns=baseline_cols)
 
     print(f"[OK] Baseline feature set scaled: {X_baseline_df.shape} "
-          f"(13 features, MinMaxScaled).")
+          f"(14 features including WSS_mean, MinMaxScaled).")
 
     return X_baseline_df, L, H, S, y, AR_n, SR_n
 
