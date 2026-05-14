@@ -54,29 +54,28 @@ def preprocess_features(df: pd.DataFrame):
     """
     y = df["y"].values if "y" in df.columns else None
 
-    # Surrogate input columns (for S and L; H will use WSS_mean directly)
+    # Surrogate input columns (for S; L and H now use WSS_mean directly)
     surrogate_cols = [
         "aspectRatio_star",   # AR
         "sizeRatio_star",     # SR
-        "minRadius",          # L proxy input
-        "tortuosity",         # L proxy input
     ]
     X_surr_norm = MinMaxScaler().fit_transform(df[surrogate_cols].values)
-    AR_n, SR_n, minR_n, tort_n = X_surr_norm.T
+    AR_n, SR_n = X_surr_norm.T
 
     # S -- Shape Stress (data-derived weights from logistic regression on cohort)
     S = SURROGATE_WEIGHTS["S_ar"] * AR_n + SURROGATE_WEIGHTS["S_sr"] * SR_n
 
-    # L -- Low Shear Damage proxy (r=-0.201, p=0.042)
-    L_raw = tort_n / (minR_n + 1e-8)
-    L     = _minmax_1d(L_raw)
+    # L -- Low Shear Damage (now from real WSS: low WSS → high damage risk)
+    WSS_n = _minmax_1d(df["WSS_mean"].values)  # Normalize WSS to [0, 1]
+    L = _minmax_1d(1.0 - WSS_n)  # Low-shear damage: (1 - WSS_n) from Aneurysm_WSS_values_clean.csv
 
-    # H -- Haemodynamic Stress driver (NOW from actual WSS_mean, MinMax-normalised)
-    H = _minmax_1d(df["WSS_mean"].values)
+    # H -- Haemodynamic Stress driver (high-shear damage, from actual WSS_mean, MinMax-normalised)
+    H = WSS_n
 
     print(f"[OK] Surrogates computed. "
           f"S std={S.std():.4f}, L std={L.std():.4f}, H std={H.std():.4f}")
-    print(f"[OK] H is now MinMaxNorm(WSS_mean) -- direct hemodynamic driver (not geometry proxy)")
+    print(f"[OK] L is now MinMaxNorm(1 - WSS_n) -- low-shear damage from real WSS")
+    print(f"[OK] H is MinMaxNorm(WSS_n) -- high-shear damage from Aneurysm_WSS_values_clean.csv")
     print(f"[OK] AR_n std={AR_n.std():.4f}, SR_n std={SR_n.std():.4f}  "
           f"(returned for r0 = 0.3*SR_n + 0.7*AR_n per Paper Eq. 8)")
 

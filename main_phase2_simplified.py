@@ -160,7 +160,7 @@ def main():
     auc_hybrid_sel = float(res_hybrid_sel["AUC"].str.split(" ").str[0].astype(float).mean())
     print(f"  Full Hybrid AUC:      {auc_hybrid:.3f}")
     print(f"  RFECV-selected AUC:   {auc_hybrid_sel:.3f}")
-    print(f"  Features reduced:     24 → {n_selected}")
+    print(f"  Features reduced:     24 -> {n_selected}")
     if auc_hybrid_sel >= auc_hybrid * 0.95:  # Within 5% is good
         print(f"  [OK] RFECV maintains performance with fewer features")
     else:
