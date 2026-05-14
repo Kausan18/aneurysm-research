@@ -1,12 +1,12 @@
 {
   "L_weights": {
-    "tortuosity": 0.43056351266191695,
-    "low_shear_WSS": 0.03685187215391945,
+    "tortuosity": 0.4305635126619169,
+    "low_shear_WSS": 0.03685187215391947,
     "length": 0.5325846151836494
   },
   "H_weights": {
-    "maxCurvature": 0.2700607327824482,
-    "tortuosity": 0.5721082609476861,
-    "meanCurvature": 0.15783100626928726
+    "maxCurvature": 0.2700607327824483,
+    "tortuosity": 0.5721082609476859,
+    "meanCurvature": 0.1578310062692873
   }
 }
