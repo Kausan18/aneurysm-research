@@ -33,9 +33,9 @@ NOMINAL_PARAMS = {
 #   Derived via logistic regression on this cohort:
 #   SR (r=+0.196, p=0.048) dominates; AR (r=+0.046, p=0.642) near-zero.
 # L = MinMax(1 - WSS_n)
-#   Low-shear damage: low WSS -> high damage risk; WSS from Aneurysm_WSS_values_clean.csv.
+#   Low-shear damage: low WSS -> high damage risk; WSS from Aneurysm_WSS_values_clean.csv (in Pascal).
 # H = MinMax(WSS_mean)
-#   High-shear damage driver from Aneurysm_WSS_values_clean.csv.
+#   High-shear damage driver from Aneurysm_WSS_values_clean.csv (in Pascal: 1 dyn/cm^2 = 0.1 Pa).
 SURROGATE_WEIGHTS = {
     "S_ar": 0.025,   # logistic-regression weight for AR_n
     "S_sr": 0.975,   # logistic-regression weight for SR_n

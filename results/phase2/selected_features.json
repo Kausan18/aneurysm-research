@@ -1,5 +1,4 @@
 {
-  "n_selected": 21,
   "selected_features": [
     "vesselDiameter",
     "meanRadius",
@@ -21,6 +20,8 @@
     "AUC_i",
     "c_min",
     "c_end",
+    "I",
+    "I_dur",
     "I_auc"
   ]
 }
