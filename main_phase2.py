@@ -198,9 +198,17 @@ def main():
             AR_n=AR_n,
             SR_n=SR_n,
         )
+        if study is None:
+            print("[WARN] Optuna study did not run. Falling back to NOMINAL_PARAMS.")
+            best_params = NOMINAL_PARAMS
+            save_note = {"note": "Bayesian optimization skipped -- optuna not installed. pip install optuna>=3.6.1"}
+            save_note.update(best_params)
+        else:
+            save_note = best_params
+
         bp_path = os.path.join(PHASE2_RESULTS_DIR, "best_params.json")
         with open(bp_path, "w") as f:
-            json.dump(best_params, f, indent=2)
+            json.dump(save_note, f, indent=2)
         print(f"  Best ODE params saved -> {bp_path}")
     else:
         print("\n[STEP 5] Skipping Optuna -- using NOMINAL_PARAMS.")

@@ -57,6 +57,11 @@ def load_data():
     df.rename(columns={"WSS_mean_dyn_cm2": "WSS_mean"}, inplace=True)
     print(f"[OK] Renamed WSS_mean_dyn_cm2 to WSS_mean")
 
+    # Convert WSS from dyn/cm^2 to Pascal (1 dyn/cm^2 = 0.1 Pa)
+    df["WSS_mean"] = df["WSS_mean"] * 0.1
+    print(f"[OK] Converted WSS_mean from dyn/cm^2 to Pascal (1 dyn/cm^2 = 0.1 Pa)")
+    print(f"     WSS_mean range: {df['WSS_mean'].min():.4f} to {df['WSS_mean'].max():.4f} Pa")
+
     # 1. Drop CFD columns (95/103 missing -- cannot impute)
     cols_to_drop = [c for c in CFD_DROP_COLS if c in df.columns]
     df.drop(columns=cols_to_drop, inplace=True)

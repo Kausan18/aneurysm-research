@@ -24,7 +24,6 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import numpy as np
 import pandas as pd
-import optuna
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import RepeatedStratifiedKFold
 from sklearn.metrics import roc_auc_score
@@ -33,7 +32,14 @@ from src.ode_model  import simulate_and_extract
 from src.features   import build_feature_sets
 from config         import PHASE2_PARAM_BOUNDS, NOMINAL_PARAMS
 
-optuna.logging.set_verbosity(optuna.logging.WARNING)
+try:
+    import optuna
+    optuna.logging.set_verbosity(optuna.logging.WARNING)
+    _OPTUNA_AVAILABLE = True
+except ImportError:
+    _OPTUNA_AVAILABLE = False
+    print("[WARN] optuna not installed -- Bayesian search will be skipped. "
+          "Run: pip install optuna>=3.6.1")
 
 
 def _cv_auc_hybrid(params, L, H, S, X_baseline_df, y,
@@ -107,6 +113,10 @@ def run_optuna_study(L, H, S, X_baseline_df, y,
     best_params : dict -- optimised ODE parameters (a1..c3)
     study       : optuna.Study -- full study object
     """
+    if not _OPTUNA_AVAILABLE:
+        print("[WARN] Optuna not available. Returning NOMINAL_PARAMS as fallback.")
+        return NOMINAL_PARAMS, None
+
     print(f"\n[Phase 2] Starting Optuna study: {n_trials} trials, TPE sampler, "
           f"MedianPruner, seed={random_state}")
 
