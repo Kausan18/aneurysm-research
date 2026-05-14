@@ -18,10 +18,7 @@
     "delta_r",
     "i_max",
     "AUC_i",
-    "c_min",
     "c_end",
-    "I",
-    "I_dur",
-    "I_auc"
+    "I"
   ]
 }

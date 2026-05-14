@@ -37,8 +37,8 @@ NOMINAL_PARAMS = {
 # H = MinMax(WSS_mean)
 #   High-shear damage driver from Aneurysm_WSS_values_clean.csv (in Pascal: 1 dyn/cm^2 = 0.1 Pa).
 SURROGATE_WEIGHTS = {
-    "S_ar": 0.025,   # logistic-regression weight for AR_n
-    "S_sr": 0.975,   # logistic-regression weight for SR_n
+    "S_ar": 0.5,     # Phase-1 equal weight for AR_n (Paper Eq. 4)
+    "S_sr": 0.5,     # Phase-1 equal weight for SR_n (Paper Eq. 4)
     # L and H are computed entirely in preprocessing.py (no scalar weights needed)
 }
 
