@@ -31,6 +31,8 @@ import sys
 import json
 import numpy as np
 import pandas as pd
+from sklearn.linear_model import LogisticRegression
+from sklearn.preprocessing import MinMaxScaler
 
 sys.path.insert(0, os.path.dirname(__file__))
 
@@ -145,6 +147,46 @@ def _print_table(label, df):
     print(df.to_string(index=False))
 
 
+def _derive_s_weights(AR_n: np.ndarray, SR_n: np.ndarray,
+                      y: np.ndarray, random_state: int = 42) -> tuple:
+    """Derive Phase 2 S surrogate weights via L2 logistic regression (Paper Eq. 15-16).
+
+    Fits LogisticRegression(penalty='l2', class_weight='balanced') on
+    [AR_n, SR_n] against rupture status, then normalises absolute coefficients
+    to sum to 1 (Paper Eq. 15):  wj = |βj| / Σ|βk|
+
+    Returns
+    -------
+    S        : np.ndarray — data-derived shape stress surrogate, MinMax-scaled to [0,1]
+    w_AR     : float      — weight for aspectRatio_star  (Paper Table II: ~0.025)
+    w_SR     : float      — weight for sizeRatio_star    (Paper Table II: ~0.975)
+    """
+    candidates = np.column_stack([AR_n, SR_n])
+    lr = LogisticRegression(
+        penalty="l2",
+        solver="lbfgs",
+        max_iter=1000,
+        class_weight="balanced",
+        random_state=random_state,
+    )
+    lr.fit(candidates, y)
+
+    # Paper Eq. 15: normalise absolute coefficients to sum = 1
+    abs_coefs = np.abs(lr.coef_[0])
+    weights   = abs_coefs / (abs_coefs.sum() + 1e-12)
+    w_AR, w_SR = float(weights[0]), float(weights[1])
+
+    S_raw = w_AR * AR_n + w_SR * SR_n
+    lo, hi = S_raw.min(), S_raw.max()
+    S = (S_raw - lo) / (hi - lo + 1e-8)   # MinMax to [0, 1]
+
+    print(f"\n[Phase 2] S surrogate weights derived via LR (Paper Eq. 15-16):")
+    print(f"  wAR (aspectRatio_star) = {w_AR:.4f}")
+    print(f"  wSR (sizeRatio_star)   = {w_SR:.4f}")
+    print(f"  S std = {S.std():.4f}  {'OK' if S.std() > 0.05 else '<< LOW'}")
+    return S, w_AR, w_SR
+
+
 def main():
     print("=" * 65)
     print("  ANEURYSM RUPTURE RISK -- PHASE 2 PIPELINE")
@@ -159,13 +201,17 @@ def main():
 
     # Step 2: Preprocess -- unpack AR_n, SR_n too
     print("\n[STEP 2] Computing Phase 1 surrogates (nominal)...")
-    X_baseline_df, L_p1, H_p1, S, y, AR_n, SR_n = preprocess_features(df)
+    X_baseline_df, L_p1, H_p1, S_p1, y, AR_n, SR_n = preprocess_features(df)
+
+    # Phase 2: derive S weights via LR on this cohort (Paper Eq. 15-16)
+    # replaces Phase 1 fixed equal weights 0.5/0.5 with data-derived wAR/wSR
+    S, w_AR, w_SR = _derive_s_weights(AR_n, SR_n, y, random_state=RANDOM_SEED)
 
     # Step 3: Phase 1 nominal biomarkers for diagnostic comparison
-    # Pass AR_n and SR_n so r0 is computed correctly
+    # Uses Phase 1 S (0.5/0.5) so the comparison is a true Phase 1 baseline
     print("\n[STEP 3] Computing Phase 1 biomarkers (nominal params)...")
     biomarkers_p1 = simulate_and_extract(
-        L_p1, H_p1, S,
+        L_p1, H_p1, S_p1,
         params=NOMINAL_PARAMS,
         AR_n=AR_n,
         SR_n=SR_n,
@@ -177,7 +223,11 @@ def main():
         L, H, L_weights, H_weights = refine_surrogate_weights(
             df, y, random_state=RANDOM_SEED
         )
-        surrogate_report = {"L_weights": L_weights, "H_weights": H_weights}
+        surrogate_report = {
+            "S_weights": {"aspectRatio_star": w_AR, "sizeRatio_star": w_SR},
+            "L_weights": L_weights,
+            "H_weights": H_weights,
+        }
         sw_path = os.path.join(PHASE2_RESULTS_DIR, "surrogate_weights.json")
         with open(sw_path, "w") as f:
             json.dump(surrogate_report, f, indent=2)
